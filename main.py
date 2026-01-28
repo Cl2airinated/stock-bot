@@ -4,6 +4,11 @@ from datetime import datetime, timedelta, UTC
 
 import numpy as np
 import pandas as pd
+from truthbrush import TruthSocialClient
+
+client = TruthSocialClient()
+posts = client.search("AAPL")
+
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
@@ -14,13 +19,11 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 from alpaca.data.enums import DataFeed
 
-# Sentiment tools
+# --- Sentiment ---
 from nltk.sentiment import SentimentIntensityAnalyzer
 sia = SentimentIntensityAnalyzer()
 
-# -------------------------
-# CONFIG
-# -------------------------
+# --- Config / Environment ---
 
 API_KEY = os.environ["ALPACA_API_KEY"]
 SECRET_KEY = os.environ["ALPACA_SECRET_KEY"]
@@ -30,12 +33,12 @@ QTY = 1
 SHORT_WINDOW = 5
 LONG_WINDOW = 20
 
+# --- Clients ---
+
 trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
-# -------------------------
-# PRICE DATA + MA STRATEGY
-# -------------------------
+# --- Data + Strategy ---
 
 def get_bars(symbol, limit=50):
     end = datetime.now(UTC)
@@ -77,27 +80,19 @@ def get_ma_signal(df):
 
     return None
 
-# -------------------------
-# SENTIMENT + TRUTHBRUSH
-# -------------------------
+# --- Sentiment + Truthbrush ---
 
 def fetch_news_or_tweets(symbol):
-    """
-    Placeholder: YOU implement this.
-    Should return a string of text about the stock.
-    """
-    return f"{symbol} is trading today."  # dummy text
+    # Placeholder — replace with real news/tweets later
+    return f"{symbol} is trading today."
 
 
 def get_sentiment(text):
     score = sia.polarity_scores(text)
-    return score["compound"]  # -1 to +1
+    return score["compound"]
 
 
 def truthbrush(sentiment_score):
-    """
-    Filters out weak or noisy sentiment.
-    """
     return abs(sentiment_score) >= 0.2
 
 
@@ -115,29 +110,16 @@ def get_sentiment_signal(symbol):
 
     return None
 
-# -------------------------
-# COMBINED DECISION ENGINE
-# -------------------------
+# --- Combine Signals ---
 
 def combine_signals(ma_signal, sentiment_signal):
-    """
-    Rules:
-    - If both agree → act
-    - If only sentiment fires → act
-    - If only MA fires → act
-    - If neither → do nothing
-    """
     if sentiment_signal:
         return sentiment_signal
-
     if ma_signal:
         return ma_signal
-
     return None
 
-# -------------------------
-# TRADING
-# -------------------------
+# --- Trading ---
 
 def place_order(symbol, side):
     order = MarketOrderRequest(
@@ -149,9 +131,7 @@ def place_order(symbol, side):
     response = trading_client.submit_order(order)
     print(f"Placed {side} order for {symbol}: {response.id}")
 
-# -------------------------
-# MAIN LOOP
-# -------------------------
+# --- Main Loop ---
 
 def main_loop():
     while True:
