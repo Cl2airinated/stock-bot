@@ -14,28 +14,30 @@ from alpaca.data.requests import StockBarsRequest
 from alpaca.data.timeframe import TimeFrame
 from alpaca.data.enums import DataFeed
 
+# Sentiment tools
+from nltk.sentiment import SentimentIntensityAnalyzer
+sia = SentimentIntensityAnalyzer()
 
-# --- Config / Environment ---
+# -------------------------
+# CONFIG
+# -------------------------
 
 API_KEY = os.environ["ALPACA_API_KEY"]
 SECRET_KEY = os.environ["ALPACA_SECRET_KEY"]
-BASE_URL = os.environ.get("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")
 
-SYMBOL = "AAPL"
+STOCKLIST = ["AAPL", "MSFT", "TSLA"]
 QTY = 1
 SHORT_WINDOW = 5
 LONG_WINDOW = 20
 
-# --- Clients ---
-
 trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
-
-# --- Data + Strategy ---
+# -------------------------
+# PRICE DATA + MA STRATEGY
+# -------------------------
 
 def get_bars(symbol, limit=50):
-    """Fetch recent minute bars using IEX (free) data."""
     end = datetime.now(UTC)
     start = end - timedelta(days=5)
 
@@ -45,20 +47,19 @@ def get_bars(symbol, limit=50):
         start=start,
         end=end,
         limit=limit,
-        feed=DataFeed.IEX,  # feed goes here in new SDK
+        feed=DataFeed.IEX,
     )
 
     bars = data_client.get_stock_bars(request)
 
     if bars.df.empty:
-        raise ValueError("No data returned from IEX feed.")
+        raise ValueError(f"No data returned for {symbol}")
 
     df = bars.df.xs(symbol, level="symbol")
     return df
 
 
-def get_signal(df):
-    """Generate buy/sell signal using moving average crossover."""
+def get_ma_signal(df):
     df["short_ma"] = df["close"].rolling(SHORT_WINDOW).mean()
     df["long_ma"] = df["close"].rolling(LONG_WINDOW).mean()
 
@@ -70,37 +71,105 @@ def get_signal(df):
 
     if prev["short_ma"] <= prev["long_ma"] and latest["short_ma"] > latest["long_ma"]:
         return "buy"
+
     if prev["short_ma"] >= prev["long_ma"] and latest["short_ma"] < latest["long_ma"]:
         return "sell"
 
     return None
 
+# -------------------------
+# SENTIMENT + TRUTHBRUSH
+# -------------------------
 
-# --- Trading ---
+def fetch_news_or_tweets(symbol):
+    """
+    Placeholder: YOU implement this.
+    Should return a string of text about the stock.
+    """
+    return f"{symbol} is trading today."  # dummy text
 
-def place_order(side):
-    """Submit a market order."""
+
+def get_sentiment(text):
+    score = sia.polarity_scores(text)
+    return score["compound"]  # -1 to +1
+
+
+def truthbrush(sentiment_score):
+    """
+    Filters out weak or noisy sentiment.
+    """
+    return abs(sentiment_score) >= 0.2
+
+
+def get_sentiment_signal(symbol):
+    text = fetch_news_or_tweets(symbol)
+    sentiment = get_sentiment(text)
+
+    if not truthbrush(sentiment):
+        return None
+
+    if sentiment >= 0.3:
+        return "buy"
+    elif sentiment <= -0.3:
+        return "sell"
+
+    return None
+
+# -------------------------
+# COMBINED DECISION ENGINE
+# -------------------------
+
+def combine_signals(ma_signal, sentiment_signal):
+    """
+    Rules:
+    - If both agree → act
+    - If only sentiment fires → act
+    - If only MA fires → act
+    - If neither → do nothing
+    """
+    if sentiment_signal:
+        return sentiment_signal
+
+    if ma_signal:
+        return ma_signal
+
+    return None
+
+# -------------------------
+# TRADING
+# -------------------------
+
+def place_order(symbol, side):
     order = MarketOrderRequest(
-        symbol=SYMBOL,
+        symbol=symbol,
         qty=QTY,
         side=OrderSide.BUY if side == "buy" else OrderSide.SELL,
         time_in_force=TimeInForce.DAY,
     )
     response = trading_client.submit_order(order)
-    print(f"Placed {side} order: {response.id}")
+    print(f"Placed {side} order for {symbol}: {response.id}")
 
-
-# --- Main Loop ---
+# -------------------------
+# MAIN LOOP
+# -------------------------
 
 def main_loop():
     while True:
         try:
-            df = get_bars(SYMBOL)
-            signal = get_signal(df)
-            print(f"{datetime.now(UTC)} - Signal: {signal}")
+            for symbol in STOCKLIST:
+                df = get_bars(symbol)
+                ma_signal = get_ma_signal(df)
+                sentiment_signal = get_sentiment_signal(symbol)
 
-            if signal in ("buy", "sell"):
-                place_order(signal)
+                final_signal = combine_signals(ma_signal, sentiment_signal)
+
+                print(
+                    f"{datetime.now(UTC)} | {symbol} | "
+                    f"MA: {ma_signal} | Sentiment: {sentiment_signal} | Final: {final_signal}"
+                )
+
+                if final_signal in ("buy", "sell"):
+                    place_order(symbol, final_signal)
 
         except Exception as e:
             print("Error:", e)
