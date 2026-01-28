@@ -4,12 +4,11 @@ from datetime import datetime, timedelta, UTC
 
 import numpy as np
 import pandas as pd
-from truthbrush import TruthSocialClient
 
-client = TruthSocialClient()
-posts = client.search("AAPL")
-
-
+# --- TruthBrush (correct import) ---
+from truthbrush.client import TruthSocialClient
+truth_client = TruthSocialClient()
+# --- Alpaca ---
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
@@ -23,8 +22,7 @@ from alpaca.data.enums import DataFeed
 from nltk.sentiment import SentimentIntensityAnalyzer
 sia = SentimentIntensityAnalyzer()
 
-# --- Config / Environment ---
-
+# --- Config ---
 API_KEY = os.environ["ALPACA_API_KEY"]
 SECRET_KEY = os.environ["ALPACA_SECRET_KEY"]
 
@@ -34,12 +32,10 @@ SHORT_WINDOW = 5
 LONG_WINDOW = 20
 
 # --- Clients ---
-
 trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
 data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 
-# --- Data + Strategy ---
-
+# --- Market Data ---
 def get_bars(symbol, limit=50):
     end = datetime.now(UTC)
     start = end - timedelta(days=5)
@@ -58,8 +54,7 @@ def get_bars(symbol, limit=50):
     if bars.df.empty:
         raise ValueError(f"No data returned for {symbol}")
 
-    df = bars.df.xs(symbol, level="symbol")
-    return df
+    return bars.df.xs(symbol, level="symbol")
 
 
 def get_ma_signal(df):
@@ -80,47 +75,44 @@ def get_ma_signal(df):
 
     return None
 
-# --- Sentiment + Truthbrush ---
-
-def fetch_news_or_tweets(symbol):
-    # Placeholder — replace with real news/tweets later
-    return f"{symbol} is trading today."
+# --- Truth Social Sentiment ---
+def fetch_truths(symbol):
+    try:
+        posts = truth_client.search(symbol)
+        texts = [p["content"] for p in posts]
+        return " ".join(texts) if texts else ""
+    except Exception as e:
+        print("TruthBrush error:", e)
+        return ""
 
 
 def get_sentiment(text):
-    score = sia.polarity_scores(text)
-    return score["compound"]
+    return sia.polarity_scores(text)["compound"]
 
 
-def truthbrush(sentiment_score):
-    return abs(sentiment_score) >= 0.2
+def truthbrush_filter(score):
+    return abs(score) >= 0.2
 
 
 def get_sentiment_signal(symbol):
-    text = fetch_news_or_tweets(symbol)
-    sentiment = get_sentiment(text)
+    text = fetch_truths(symbol)
+    score = get_sentiment(text)
 
-    if not truthbrush(sentiment):
+    if not truthbrush_filter(score):
         return None
 
-    if sentiment >= 0.3:
+    if score >= 0.3:
         return "buy"
-    elif sentiment <= -0.3:
+    if score <= -0.3:
         return "sell"
 
     return None
 
 # --- Combine Signals ---
-
 def combine_signals(ma_signal, sentiment_signal):
-    if sentiment_signal:
-        return sentiment_signal
-    if ma_signal:
-        return ma_signal
-    return None
+    return sentiment_signal or ma_signal
 
 # --- Trading ---
-
 def place_order(symbol, side):
     order = MarketOrderRequest(
         symbol=symbol,
@@ -132,7 +124,6 @@ def place_order(symbol, side):
     print(f"Placed {side} order for {symbol}: {response.id}")
 
 # --- Main Loop ---
-
 def main_loop():
     while True:
         try:
@@ -140,7 +131,6 @@ def main_loop():
                 df = get_bars(symbol)
                 ma_signal = get_ma_signal(df)
                 sentiment_signal = get_sentiment_signal(symbol)
-
                 final_signal = combine_signals(ma_signal, sentiment_signal)
 
                 print(
