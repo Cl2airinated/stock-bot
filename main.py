@@ -19,8 +19,9 @@ api = tradeapi.REST(
 
 
 
-SYMBOL = "AAPL"
-QTY = 10
+SYMBOLS = ["AXON","APP","BTC"]
+LOOKBACK = 40
+MAX_DOLLARS_PER_TRADE = 1000
 LOOKBACK = 40
 
 STOP_LOSS_PCT = 0.03
@@ -44,6 +45,17 @@ def compute_rsi(series, period=14):
 # -------------------------
 # Data
 # -------------------------
+
+def calculate_qty(symbol, max_dollars):
+    try:
+        price = float(api.get_latest_trade(symbol).price)
+    except Exception as e:
+        print(f"Price error for {symbol}: {e}")
+        return 0
+
+    qty = int(max_dollars // price)
+    return max(qty, 1)  # never return 0
+
 
 def get_bars(symbol):
     try:
@@ -129,26 +141,29 @@ def manage_position(symbol):
 # Main Loop
 # -------------------------
 
-def trade():
-    bars = get_bars(SYMBOL)
+def trade(symbol):
+    bars = get_bars(symbol)
 
-    if bars is None or bars.empty:
-        print("Skipping trade: no data")
+    if bars.empty:
         return
 
-    position = get_position(SYMBOL)
+    position = get_position(symbol)
 
     if not position:
         if should_short(bars):
-            short_market(SYMBOL, QTY)
+            qty = calculate_qty(symbol, MAX_DOLLARS_PER_TRADE)
+            short_market(symbol, qty)
         else:
-            print("No short signal.")
+            print(f"{symbol}: No short signal")
     else:
-        manage_position(SYMBOL)
+        manage_position(symbol)
+
 
 
 
 if __name__ == "__main__":
     while True:
-        trade()
-        time.sleep(60 * 5) 
+        for symbol in SYMBOLS:
+            trade(symbol)
+        time.sleep(60 * 5)
+
