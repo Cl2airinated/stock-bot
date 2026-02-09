@@ -1,161 +1,154 @@
-import os
-import time
-from datetime import datetime, timedelta, UTC
+# pip install alpaca-trade-api pandas numpy
 
-import numpy as np
+import alpaca_trade_api as tradeapi
 import pandas as pd
-from truthbrush import TruthSocialClient
-
-client = TruthSocialClient()
-posts = client.search("AAPL")
-
-
-from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import MarketOrderRequest
-from alpaca.trading.enums import OrderSide, TimeInForce
-
-from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockBarsRequest
-from alpaca.data.timeframe import TimeFrame
-from alpaca.data.enums import DataFeed
-
-# --- Sentiment ---
-from nltk.sentiment import SentimentIntensityAnalyzer
-sia = SentimentIntensityAnalyzer()
-
-# --- Config / Environment ---
-
-API_KEY = os.environ["ALPACA_API_KEY"]
-SECRET_KEY = os.environ["ALPACA_SECRET_KEY"]
-
-STOCKLIST = ["AAPL", "MSFT", "TSLA"]
-QTY = 1
-SHORT_WINDOW = 5
-LONG_WINDOW = 20
-
-# --- Clients ---
-
-trading_client = TradingClient(API_KEY, SECRET_KEY, paper=True)
-data_client = StockHistoricalDataClient(API_KEY, SECRET_KEY)
-
-# --- Data + Strategy ---
-
-def get_bars(symbol, limit=50):
-    end = datetime.now(UTC)
-    start = end - timedelta(days=5)
-
-    request = StockBarsRequest(
-        symbol_or_symbols=symbol,
-        timeframe=TimeFrame.Minute,
-        start=start,
-        end=end,
-        limit=limit,
-        feed=DataFeed.IEX,
-    )
-
-    bars = data_client.get_stock_bars(request)
-
-    if bars.df.empty:
-        raise ValueError(f"No data returned for {symbol}")
-
-    df = bars.df.xs(symbol, level="symbol")
-    return df
+import time
+from alpaca_trade_api.rest import TimeFrame
+from config import API_KEY, API_SECRET, BASE_URL
 
 
-def get_ma_signal(df):
-    df["short_ma"] = df["close"].rolling(SHORT_WINDOW).mean()
-    df["long_ma"] = df["close"].rolling(LONG_WINDOW).mean()
 
-    if len(df) < LONG_WINDOW:
+
+api = tradeapi.REST(
+    API_KEY,
+    API_SECRET,
+    BASE_URL,
+    api_version="v2"
+)
+
+
+
+
+SYMBOL = "AAPL"
+QTY = 10
+LOOKBACK = 40
+
+STOP_LOSS_PCT = 0.03
+TAKE_PROFIT_PCT = 0.05
+
+# -------------------------
+# RSI Indicator
+# -------------------------
+
+def compute_rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
+
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+# -------------------------
+# Data
+# -------------------------
+
+def get_bars(symbol):
+    try:
+        bars = api.get_bars(symbol, TimeFrame.Minute, limit=LOOKBACK).df
+    except Exception as e:
+        print(f"Error fetching bars for {symbol}: {e}")
+        return pd.DataFrame()
+
+    if len(bars) < 20:
+        print(f"⚠️ Not enough candles for RSI ({len(bars)} bars)")
+        return pd.DataFrame()
+
+    bars["RSI"] = compute_rsi(bars["close"])
+    bars = bars.dropna()
+
+    if bars.empty:
+        print(f"⚠️ RSI calculation returned no usable rows")
+    return bars
+
+
+
+
+# -------------------------
+# Trading Helpers
+# -------------------------
+
+def get_position(symbol):
+    try:
+        return api.get_position(symbol)
+    except:
         return None
 
-    latest = df.iloc[-1]
-    prev = df.iloc[-2]
-
-    if prev["short_ma"] <= prev["long_ma"] and latest["short_ma"] > latest["long_ma"]:
-        return "buy"
-
-    if prev["short_ma"] >= prev["long_ma"] and latest["short_ma"] < latest["long_ma"]:
-        return "sell"
-
-    return None
-
-# --- Sentiment + Truthbrush ---
-
-def fetch_news_or_tweets(symbol):
-    # Placeholder — replace with real news/tweets later
-    return f"{symbol} is trading today."
-
-
-def get_sentiment(text):
-    score = sia.polarity_scores(text)
-    return score["compound"]
-
-
-def truthbrush(sentiment_score):
-    return abs(sentiment_score) >= 0.2
-
-
-def get_sentiment_signal(symbol):
-    text = fetch_news_or_tweets(symbol)
-    sentiment = get_sentiment(text)
-
-    if not truthbrush(sentiment):
-        return None
-
-    if sentiment >= 0.3:
-        return "buy"
-    elif sentiment <= -0.3:
-        return "sell"
-
-    return None
-
-# --- Combine Signals ---
-
-def combine_signals(ma_signal, sentiment_signal):
-    if sentiment_signal:
-        return sentiment_signal
-    if ma_signal:
-        return ma_signal
-    return None
-
-# --- Trading ---
-
-def place_order(symbol, side):
-    order = MarketOrderRequest(
+def short_market(symbol, qty):
+    api.submit_order(
         symbol=symbol,
-        qty=QTY,
-        side=OrderSide.BUY if side == "buy" else OrderSide.SELL,
-        time_in_force=TimeInForce.DAY,
+        qty=qty,
+        side="sell",
+        type="market",
+        time_in_force="day"
     )
-    response = trading_client.submit_order(order)
-    print(f"Placed {side} order for {symbol}: {response.id}")
+    print(f"📉 SHORT {symbol} ({qty})")
 
-# --- Main Loop ---
+def cover_market(symbol, qty):
+    api.submit_order(
+        symbol=symbol,
+        qty=qty,
+        side="buy",
+        type="market",
+        time_in_force="day"
+    )
+    print(f"📈 COVER {symbol} ({qty})")
 
-def main_loop():
-    while True:
-        try:
-            for symbol in STOCKLIST:
-                df = get_bars(symbol)
-                ma_signal = get_ma_signal(df)
-                sentiment_signal = get_sentiment_signal(symbol)
+# -------------------------
+# Strategy Logic
+# -------------------------
 
-                final_signal = combine_signals(ma_signal, sentiment_signal)
+def should_short(bars):
+    if bars.empty:
+        return False  # never short if no data
+    last = bars.iloc[-1]
+    return 30 < last.RSI < 45
 
-                print(
-                    f"{datetime.now(UTC)} | {symbol} | "
-                    f"MA: {ma_signal} | Sentiment: {sentiment_signal} | Final: {final_signal}"
-                )
 
-                if final_signal in ("buy", "sell"):
-                    place_order(symbol, final_signal)
+def manage_position(symbol):
+    pos = get_position(symbol)
+    if not pos:
+        return
 
-        except Exception as e:
-            print("Error:", e)
+    entry = float(pos.avg_entry_price)
+    price = float(api.get_latest_trade(symbol).price)
+    profit_pct = (entry - price) / entry
+    qty = abs(int(float(pos.qty)))
 
-        time.sleep(60)
+    if profit_pct >= TAKE_PROFIT_PCT:
+        cover_market(symbol, qty)
+        print("✅ Take profit hit")
+
+    elif profit_pct <= -STOP_LOSS_PCT:
+        cover_market(symbol, qty)
+        print("🛑 Stop loss hit")
+
+# -------------------------
+# Main Loop
+# -------------------------
+
+def trade():
+    bars = get_bars(SYMBOL)
+
+    if bars is None or bars.empty:
+        print("Skipping trade: no data")
+        return
+
+    position = get_position(SYMBOL)
+
+    if not position:
+        if should_short(bars):
+            short_market(SYMBOL, QTY)
+        else:
+            print("No short signal.")
+    else:
+        manage_position(SYMBOL)
+
 
 
 if __name__ == "__main__":
-    main_loop()
+    while True:
+        trade()
+        time.sleep(60 * 5) 

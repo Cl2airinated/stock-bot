@@ -1,3 +1,3 @@
-alpaca-py
+alpaca-trade-api
 pandas
 numpy
