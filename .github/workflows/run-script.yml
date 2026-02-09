@@ -1,0 +1,27 @@
+name: Run Python Script Every 5 Minutes
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:  # lets you run it manually too
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt || true
+
+      - name: Run script
+        run: |
+          python script.py
