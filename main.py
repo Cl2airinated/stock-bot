@@ -6,6 +6,27 @@ import time
 from alpaca_trade_api.rest import TimeFrame
 from config import API_KEY, API_SECRET, BASE_URL
 
+# Instead of: SYMBOLS = ["AXON","APP","BTC"]
+# Use full S&P 500 list directly
+
+SYMBOLS = [
+"AAPL","MSFT","AMZN","GOOGL","GOOG","NVDA","META","TSLA","BRK.B","UNH",
+"JNJ","XOM","V","JPM","PG","MA","HD","CVX","MRK","BAC","ABBV","KO","PEP",
+"AVGO","LLY","NFLX","COST","TMO","ADBE","CRM","CMCSA","PFE","ABT","ACN","WMT",
+"ORCL","NKE","T","MDT","DHR","MCD","C","NEE","TXN","LIN","AMGN","UNP","HON",
+"PM","LOW","BMY","UPS","QCOM","RTX","INTC","MS","AXP","IBM","SCHW","GE","SBUX",
+"CAT","BLK","LMT","ISRG","DE","CVS","PLD","ADI","AMAT","SYK","COP","ANTM","CB",
+"ZM","GS","AMT","MO","NOW","TJX","MDLZ","GILD","BDX","SPGI","CME","BK","CI",
+"CCI","PNC","FIS","BSX","EXC","SO","DUK","LRCX","FISV","AON","ZTS","GM","CL",
+"REGN","TGT","PPG","MCO","ICE","ELV","ITW","ALL","KMB","MMC","VRTX","HUM","TFC",
+"ADP","WM","EOG","HCA","SHW","EW","D","EBAY","ETN","KMI","PSX","AKAM","ETSY",
+"ROP","CXO","AES","SLB","AIG","FTNT","ABMD","ROST","VLO","MSCI","HES","NOC",
+"KEYS","BLL","AEE","NTRS","IFF","MPC","TFX","PNR","PNW","OXY","WBA","CARR",
+"VRSK","CMS","PXD","DAL","KHC","DD","TRV","EL","APD","ADM","HPE","MTB","TRP",
+"FFIV","UDR","CLX","GPN","ESS","PRU","HSY","YUM","NEM","EQR","AFL","HIG","EXR",
+"DOW","TEX","BAX","MLM","SRE","SYF","AVB","FTV","WY","GL","EIX","PGR","HST",
+"MLPE","EFX","LH","CNP","RYAAY","WLTW","PH","WRB"
+]
 
 
 
@@ -82,6 +103,28 @@ def get_bars(symbol):
 # Trading Helpers
 # -------------------------
 
+def performance_pct(bars):
+    if bars.empty:
+        return None
+    start = bars.iloc[0].close
+    end = bars.iloc[-1].close
+    return (end - start) / start
+
+def get_worst_performers(symbols, top_n=10):
+    perf = []
+
+    for symbol in symbols:
+        bars = get_bars(symbol)
+        if bars.empty:
+            continue
+
+        pct = performance_pct(bars)
+        if pct is not None:
+            perf.append((symbol, pct))
+
+    perf.sort(key=lambda x: x[1])  # worst first
+    return [s for s, _ in perf[:top_n]]
+
 def get_position(symbol):
     try:
         return api.get_position(symbol)
@@ -114,9 +157,10 @@ def cover_market(symbol, qty):
 
 def should_short(bars):
     if bars.empty:
-        return False  # never short if no data
+        return False
     last = bars.iloc[-1]
     return 30 < last.RSI < 45
+
 
 
 def manage_position(symbol):
@@ -159,11 +203,16 @@ def trade(symbol):
         manage_position(symbol)
 
 
+def run_strategy():
+    worst = get_worst_performers(SYMBOLS, top_n=10)
+
+    for symbol in worst:
+        trade(symbol)
 
 
 if __name__ == "__main__":
     while True:
-        for symbol in SYMBOLS:
-            trade(symbol)
+        run_strategy()
         time.sleep(60 * 5)
+
 

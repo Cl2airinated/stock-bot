@@ -1,0 +1,19 @@
+SP500_SYMBOLS = [
+"AAPL","MSFT","AMZN","GOOGL","GOOG","NVDA","META","TSLA","BRK.B","UNH",
+"JNJ","XOM","V","JPM","PG","MA","HD","CVX","MRK","BAC","ABBV","KO","PEP",
+"AVGO","LLY","NFLX","COST","TMO","ADBE","CRM","CMCSA","PFE","ABT","ACN","WMT",
+"ORCL","NKE","T","MDT","DHR","MCD","C","NEE","TXN","LIN","AMGN","UNP","HON",
+"PM","LOW","BMY","UPS","QCOM","RTX","INTC","MS","AXP","IBM","SCHW","GE","SBUX",
+"CAT","BLK","LMT","ISRG","DE","CVS","PLD","ADI","AMAT","SYK","COP","ANTM","CB",
+"ZM","GS","AMT","MO","NOW","TJX","MDLZ","GILD","BDX","SPGI","CME","BK",
+"CI","CCI","PNC","FIS","BSX","BDX","EXC","SO","DUK","LRCX","FISV","AON","SCHW",
+"ZTS","GM","CL","REGN","TGT","SO","PPG","MCO","ICE","ELV","ITW","ALL","KMB",
+"MMC","VRTX","HUM","TFC","ADP","WM","EOG","HCA","SHW","EW","D","EBAY","ETN",
+"KMI","PSX","AKAM","ETSY","ROP","CXO","AES","AES","SLB","AIG","FTNT","VRTX",
+"ABMD","ROST","VLO","MSCI","HES","NOC","KEYS","BLL","AEE","NTRS","IFF","MPC",
+"TFX","PNR","PNW","OXY","WBA","CARR","VRSK","CMS","PXD","DAL","KHC","DD",
+"TRV","EL","APD","ADM","HPE","MTB","TRP","FFIV","UDR","CLX","GPN","AKAM",
+"ESS","PRU","HSY","YUM","NEM","EQR","AFL","HIG","EXR","DOW","TEX","HUM","BAX",
+"MLM","SRE","SYF","AVB","BDX","FTV","WY","GL","WM","EIX","PGR","HST","AES",
+"MLPE","EFX","LH","CNP","RYAAY","WLTW","PH","PNC","ETR","IFF","HPE","WRB"
+]
