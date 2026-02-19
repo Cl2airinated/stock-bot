@@ -6,8 +6,21 @@ import time
 from alpaca_trade_api.rest import TimeFrame
 from config import API_KEY, API_SECRET, BASE_URL
 
-# Instead of: SYMBOLS = ["AXON","APP","BTC"]
-# Use full S&P 500 list directly
+
+
+
+
+
+
+api = tradeapi.REST(
+    API_KEY,
+    API_SECRET,
+    BASE_URL,
+    api_version="v2"
+)
+
+
+
 
 SYMBOLS = [
 "AAPL","MSFT","AMZN","GOOGL","GOOG","NVDA","META","TSLA","BRK.B","UNH",
@@ -27,22 +40,8 @@ SYMBOLS = [
 "DOW","TEX","BAX","MLM","SRE","SYF","AVB","FTV","WY","GL","EIX","PGR","HST",
 "MLPE","EFX","LH","CNP","RYAAY","WLTW","PH","WRB"
 ]
-
-
-
-api = tradeapi.REST(
-    API_KEY,
-    API_SECRET,
-    BASE_URL,
-    api_version="v2"
-)
-
-
-
-
-SYMBOLS = ["AXON","APP","BTC"]
 LOOKBACK = 40
-MAX_DOLLARS_PER_TRADE = 1000
+MAX_DOLLARS_PER_TRADE = 100000
 LOOKBACK = 40
 
 STOP_LOSS_PCT = 0.03
