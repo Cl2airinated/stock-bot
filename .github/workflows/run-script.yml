@@ -6,7 +6,7 @@ on:
   workflow_dispatch:  # lets you run it manually too
 
 jobs:
-  run-script:
+  run-main:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,6 +22,6 @@ jobs:
         run: |
           pip install -r requirements.txt || true
 
-      - name: Run script
+      - name: Run main
         run: |
-          python script.py
+          python main.py
