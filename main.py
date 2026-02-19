@@ -11,6 +11,19 @@ API_SECRET = os.getenv("API_SECRET")
 BASE_URL = os.getenv("BASE_URL")
 
 if not API_KEY or not API_SECRET or not BASE_URL: raise Exception("Missing API credentials")
+import time
+import random
+
+def safe_api_call(func, *args, **kwargs):
+    for attempt in range(5):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            wait = 1 + attempt + random.random()
+            print(f"API error: {e} — retrying in {wait:.2f}s")
+            time.sleep(wait)
+    print("API failed after 5 retries")
+    return None
 
 
 
@@ -83,7 +96,11 @@ def calculate_qty(symbol, max_dollars):
 
 def get_bars(symbol):
     try:
-        bars = api.get_bars(symbol, TimeFrame.Minute, limit=LOOKBACK).df
+        bars_resp = safe_api_call(api.get_bars, symbol, TimeFrame.Minute, limit=LOOKBACK)
+        if bars_resp is None:
+            return pd.DataFrame()
+        bars = bars_resp.df
+
     except Exception as e:
         print(f"Error fetching bars for {symbol}: {e}")
         return pd.DataFrame()
@@ -135,13 +152,8 @@ def get_position(symbol):
         return None
 
 def short_market(symbol, qty):
-    api.submit_order(
-        symbol=symbol,
-        qty=qty,
-        side="sell",
-        type="market",
-        time_in_force="day"
-    )
+    safe_api_call(api.submit_order, symbol=symbol, qty=qty, side="sell", type="market", time_in_force="day")
+
     print(f"📉 SHORT {symbol} ({qty})")
 
 def cover_market(symbol, qty):
@@ -172,7 +184,11 @@ def manage_position(symbol):
         return
 
     entry = float(pos.avg_entry_price)
-    price = float(api.get_latest_trade(symbol).price)
+    trade = safe_api_call(api.get_latest_trade, symbol)
+    if trade is None:
+        return 0
+    price = float(trade.price)
+
     profit_pct = (entry - price) / entry
     qty = abs(int(float(pos.qty)))
 
@@ -211,8 +227,11 @@ def trade(symbol):
 def run_strategy():
     worst = get_worst_performers(SYMBOLS, top_n=10)
 
+    
     for symbol in worst:
         trade(symbol)
+        time.sleep(0.5)  # prevents rate-limit bursts
+
 
 
 if __name__ == "__main__":
