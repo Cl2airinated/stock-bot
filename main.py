@@ -10,7 +10,7 @@ API_KEY = os.getenv("API_KEY")
 API_SECRET = os.getenv("API_SECRET")
 BASE_URL = os.getenv("BASE_URL")
 
-
+if not API_KEY or not API_SECRET or not BASE_URL: raise Exception("Missing API credentials")
 
 
 
@@ -192,7 +192,9 @@ def trade(symbol):
     bars = get_bars(symbol)
 
     if bars.empty:
+        print(f"{symbol}: Skipping — no data available")
         return
+
 
     position = get_position(symbol)
 
